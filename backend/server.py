@@ -15,13 +15,19 @@ from enum import Enum
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+# MongoDB connection - use environment variable
+mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
+db_name = os.environ.get('DB_NAME', 'taskflow_db')
 
-# Create the main app without a prefix
-app = FastAPI()
+client = AsyncIOMotorClient(mongo_url)
+db = client[db_name]
+
+# Create the main app
+app = FastAPI(
+    title="TaskFlow API",
+    description="Task Management API for AWS App Runner",
+    version="1.0.0"
+)
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -84,10 +90,14 @@ class TaskStats(BaseModel):
     low_priority: int
 
 
-# Add your routes to the router instead of directly to app
+# Health check endpoint (required for App Runner)
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "service": "TaskFlow API"}
+
 @api_router.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "Welcome to TaskFlow API"}
 
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate):
@@ -206,10 +216,13 @@ async def get_task_stats():
 # Include the router in the main app
 app.include_router(api_router)
 
+# CORS - Allow all origins for now (configure properly in production)
+allowed_origins = os.environ.get('CORS_ORIGINS', '*').split(',')
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=allowed_origins if allowed_origins != ['*'] else ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -221,6 +234,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+@app.on_event("startup")
+async def startup_event():
+    logger.info("TaskFlow API starting up...")
+    logger.info(f"Connected to MongoDB: {db_name}")
+
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+    logger.info("TaskFlow API shutting down...")
