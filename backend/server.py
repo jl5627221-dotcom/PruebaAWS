@@ -5,7 +5,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
 from typing import List, Optional
 import uuid
 from datetime import datetime, timezone
@@ -47,11 +47,12 @@ class TaskStatus(str, Enum):
 
 # Define Models
 class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     client_name: str
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    
+    class Config:
+        extra = "ignore"
 
 class StatusCheckCreate(BaseModel):
     client_name: str
@@ -59,8 +60,6 @@ class StatusCheckCreate(BaseModel):
 
 # Task Models
 class Task(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     title: str
     description: Optional[str] = ""
@@ -68,6 +67,9 @@ class Task(BaseModel):
     status: TaskStatus = TaskStatus.PENDING
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    
+    class Config:
+        extra = "ignore"
 
 class TaskCreate(BaseModel):
     title: str
@@ -101,10 +103,10 @@ async def root():
 
 @api_router.post("/status", response_model=StatusCheck)
 async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
+    status_dict = input.dict()
     status_obj = StatusCheck(**status_dict)
     
-    doc = status_obj.model_dump()
+    doc = status_obj.dict()
     doc['timestamp'] = doc['timestamp'].isoformat()
     
     _ = await db.status_checks.insert_one(doc)
@@ -142,10 +144,10 @@ async def get_tasks(status: Optional[TaskStatus] = None, priority: Optional[Task
 
 @api_router.post("/tasks", response_model=Task)
 async def create_task(task_input: TaskCreate):
-    task_dict = task_input.model_dump()
+    task_dict = task_input.dict()
     task_obj = Task(**task_dict)
     
-    doc = task_obj.model_dump()
+    doc = task_obj.dict()
     doc['created_at'] = doc['created_at'].isoformat()
     doc['updated_at'] = doc['updated_at'].isoformat()
     
@@ -171,7 +173,7 @@ async def update_task(task_id: str, task_update: TaskUpdate):
     if not existing_task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    update_data = {k: v for k, v in task_update.model_dump().items() if v is not None}
+    update_data = {k: v for k, v in task_update.dict().items() if v is not None}
     if update_data:
         update_data['updated_at'] = datetime.now(timezone.utc).isoformat()
         await db.tasks.update_one({"id": task_id}, {"$set": update_data})
