@@ -1,4 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -25,7 +27,7 @@ db = client[db_name]
 # Create the main app
 app = FastAPI(
     title="TaskFlow API",
-    description="Task Management API for AWS App Runner",
+    description="Task Management API",
     version="1.0.0"
 )
 
@@ -92,7 +94,7 @@ class TaskStats(BaseModel):
     low_priority: int
 
 
-# Health check endpoint (required for App Runner)
+# Health check endpoint
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": "TaskFlow API"}
@@ -218,13 +220,11 @@ async def get_task_stats():
 # Include the router in the main app
 app.include_router(api_router)
 
-# CORS - Allow all origins for now (configure properly in production)
-allowed_origins = os.environ.get('CORS_ORIGINS', '*').split(',')
-
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=allowed_origins if allowed_origins != ['*'] else ["*"],
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
